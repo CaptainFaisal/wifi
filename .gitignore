@@ -1,2 +1,4 @@
-wordList.txt
-rockyou.txt
+__pycache__/
+config_dump/
+*.xml
+*.txt

