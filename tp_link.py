@@ -226,7 +226,7 @@ def is_tplink(ip_port: str) -> bool:
         s = requests.Session()
         resp = s.get(f"http://{ip_port}/", timeout=5)
         s.close()
-        if "TP-LINK" in resp.text:
+        if "tp-link" in resp.text.lower():
             return True
         return False
     except:
